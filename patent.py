@@ -10,25 +10,13 @@ parser.add_argument("-n", "--number", help="The number of patent")
 parser.add_argument("-f", "--file", help="Get all images of the patent in the excel file")
 args = parser.parse_args()
 
-image_domain = 'https://twpat7.tipo.gov.tw'
-
 
 def main():
 
     patent_numbers = get_patent_numbers_from_excel() if args.file else [args.number]
 
     for number in patent_numbers:
-        response = urlopen('https://twpat7.tipo.gov.tw/tipotwoc/tipotwkm?!!FR_{}'.format(number))
-
-        html = response.read()
-
-        soup = BeautifulSoup(html, 'html.parser')
-
-        image_tags = soup.find_all('img', {'src': re.compile(r'/tipotwousr/.*/.*\?')})
-
-        create_image_folder(number)
-
-        download_all_image(number, image_tags)
+        PatentTw(number).download_all_image()
 
 
 def get_patent_numbers_from_excel():
@@ -36,24 +24,40 @@ def get_patent_numbers_from_excel():
     return df.iloc[:, 0]
 
 
-def create_image_folder(number):
-    image_folder_path = os.path.join(os.getcwd(), 'image', number)
+class PatentTw:
+    base_url = 'https://twpat7.tipo.gov.tw'
 
-    if not os.path.isdir(image_folder_path):
-        os.makedirs(image_folder_path, exist_ok=True)
+    def __init__(self, number):
+        self.number = number
+        self.download_urls = self.__get_all_image_download_url()
 
+    def __get_all_image_download_url(self):
+        detail_url = self.base_url + f'/tipotwoc/tipotwkm?!!FR_{self.number}'
 
-def download_all_image(number, tags):
-    image_folder_path = os.path.join(os.getcwd(), 'image', number)
+        with urlopen(detail_url) as response:
+            html = response.read()
 
-    for tag in tags:
-        image_download_url = image_domain + tag["src"]
+        soup = BeautifulSoup(html, 'html.parser')
 
-        image_name = os.path.basename(image_download_url).split("?")[0]
+        tags = soup.find_all('img', {'src': re.compile(r'/tipotwousr/.*/.*\?')})
 
-        print('Download: ' + str(image_name))
+        return [self.base_url + tag['src'] for tag in tags]
 
-        urlretrieve(image_download_url, image_folder_path + '/' + image_name)
+    def download_all_image(self):
+        # download url: 'https://twpat7.tipo.gov.tw/tipotwousr/00050/TWG2090224492_000.png?1037045170'
+        # file name: TWG2090224492_000.png
+        for download_url in self.download_urls:
+
+            file_name = os.path.basename(download_url).split("?")[0]
+
+            folder_path = os.path.join(os.getcwd(), 'image', self.number)
+
+            if not os.path.isdir(folder_path):
+                os.makedirs(folder_path, exist_ok=True)
+
+            print(f'Download {file_name}')
+
+            urlretrieve(download_url, folder_path + '/' + str(file_name))
 
 
 if __name__ == "__main__":
